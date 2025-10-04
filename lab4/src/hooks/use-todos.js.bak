@@ -1,0 +1,122 @@
+import { useState, useEffect } from 'react'
+
+const API_URL = 'https://dummyjson.com/todos'
+
+export function useTodos() {
+  const [todos, setTodos] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    fetchTodos({ signal: controller.signal })
+
+    return () => controller.abort()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const fetchTodos = async (opts = {}) => {
+    try {
+      setIsLoading(true)
+      setError(null)
+      const res = await fetch(`${API_URL}?limit=10`, opts)
+      if (!res.ok) throw new Error(`Failed to fetch todos: ${res.status}`)
+      const data = await res.json()
+
+      // map API shape -> { id, title, completed }
+      const mapped = (data.todos || []).map((t) => ({
+        id: t.id,
+        title: t.todo ?? t.title ?? t.text ?? 'Untitled',
+        completed: Boolean(t.completed),
+        // keep original if needed:
+        __raw: t,
+      }))
+
+      console.log('fetched todos (mapped):', mapped)
+      setTodos(mapped)
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        console.log('fetch aborted')
+        return
+      }
+      console.error('fetchTodos error', err)
+      setError(err instanceof Error ? err.message : 'An error occurred')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const addTodo = async (text) => {
+    try {
+      setError(null)
+      const response = await fetch(`${API_URL}/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          todo: text,
+          completed: false,
+          userId: 1,
+        }),
+      })
+      if (!response.ok) throw new Error('Failed to add todo')
+      const newTodoRaw = await response.json()
+      // normalize
+      const newTodo = {
+        id: newTodoRaw.id ?? Date.now(),
+        title: newTodoRaw.todo ?? text,
+        completed: Boolean(newTodoRaw.completed),
+        __raw: newTodoRaw,
+      }
+      setTodos((prev) => [newTodo, ...prev])
+    } catch (err) {
+      console.error('addTodo error', err)
+      setError(err instanceof Error ? err.message : 'Failed to add todo')
+    }
+  }
+
+  const toggleTodo = async (id) => {
+    const todo = todos.find((t) => t.id === id)
+    if (!todo) return
+
+    try {
+      setError(null)
+      // call API (update) — using original id
+      const response = await fetch(`${API_URL}/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ completed: !todo.completed }),
+      })
+      if (!response.ok) throw new Error('Failed to update todo')
+      // update locally
+      setTodos((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
+      )
+    } catch (err) {
+      console.error('toggleTodo error', err)
+      setError(err instanceof Error ? err.message : 'Failed to update todo')
+    }
+  }
+
+  const deleteTodo = async (id) => {
+    try {
+      setError(null)
+      const response = await fetch(`${API_URL}/${id}`, {
+        method: 'DELETE',
+      })
+      if (!response.ok) throw new Error('Failed to delete todo')
+      setTodos((prev) => prev.filter((t) => t.id !== id))
+    } catch (err) {
+      console.error('deleteTodo error', err)
+      setError(err instanceof Error ? err.message : 'Failed to delete todo')
+    }
+  }
+
+  return {
+    todos,
+    isLoading,
+    error,
+    addTodo,
+    toggleTodo,
+    deleteTodo,
+  }
+}

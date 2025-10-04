@@ -1,0 +1,10 @@
+﻿import React from "react";
+
+/* Minimal test TodoItem to check rendering */
+export default function TodoItem({ todo, onToggle, onDelete }) {
+  return (
+    <li style={{ padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+      <strong>TEST ITEM:</strong> {String(todo?.title ?? todo?.todo ?? todo?.text ?? todo?.id)}
+    </li>
+  );
+}
